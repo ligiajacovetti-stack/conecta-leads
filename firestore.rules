@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null && request.auth.token.email != null; }
+    function local() { return request.auth.token.email.split('@')[0]; }
+    function login() { return local().split('[+]')[0]; }
+    function ver() { return local().split('[+]')[1]; }
+    function boot() { return signed() && request.auth.token.email == 'ligia.santos+1@conecta-leads.app'; }
+    function udoc() { return /databases/$(database)/documents/usuarios/$(login()); }
+    function member() {
+      return signed() && exists(udoc())
+        && get(udoc()).data.get('ativo', true) != false
+        && string(get(udoc()).data.get('authV', 0)) == ver();
+    }
+    function perfil() { return get(udoc()).data.get('perfil', ''); }
+    function adm() { return boot() || (member() && perfil() == 'adm'); }
+    function sup() { return member() && perfil() == 'sup'; }
+
+    match /authv/{id} {
+      allow get: if true;
+      allow list: if adm();
+      allow write: if adm() || sup();
+    }
+
+    match /usuarios/{id} {
+      allow read: if boot() || member();
+      allow create: if adm() || (sup() && request.resource.data.perfil == 'con');
+      allow delete: if adm();
+      allow update: if adm()
+        || (sup() && resource.data.perfil == 'con' && request.resource.data.perfil == 'con')
+        || (member() && id == login()
+            && request.resource.data.get('perfil', '') == resource.data.get('perfil', '')
+            && request.resource.data.get('authV', 0) == resource.data.get('authV', 0)
+            && request.resource.data.get('ativo', true) == resource.data.get('ativo', true)
+            && request.resource.data.get('refs', []) == resource.data.get('refs', [])
+            && request.resource.data.get('ref', '') == resource.data.get('ref', ''));
+    }
+
+    match /{col}/{id} {
+      allow read, write: if col != 'usuarios' && col != 'authv' && (boot() || member());
+    }
+  }
+}

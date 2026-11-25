@@ -1152,7 +1152,7 @@ tr.row-late{background:rgba(163,20,64,.04)}
       <button class="lnk" id="btnPass">Alterar minha senha</button>
       <button class="lnk" id="btnLogout">Sair</button>
       <div class="sync" id="sync"><i></i><span>Conectando…</span></div>
-      <span class="proto-tag" id="proto">Protótipo — use só dados de teste</span>
+      <span class="proto-tag" id="proto"></span>
     </div>
   </aside>
 
@@ -1227,6 +1227,11 @@ tr.row-late{background:rgba(163,20,64,.04)}
 <datalist id="dlGrupo"></datalist><datalist id="dlBand"><option value="Hyundai"><option value="Nissan"><option value="Chevrolet"><option value="Volkswagen"><option value="Volvo"><option value="Jeep"><option value="RAM"></datalist>
 <datalist id="dlSup"></datalist>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="media/map.js"></script>
 <script>
 (function(){
 "use strict";
@@ -1263,7 +1268,7 @@ const IC={chev:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stro
   wa:'<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-3.3-.8-2.8-1.1-4.5-4-4.7-4.2-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.1 1 2.1 1.3 2.4 1.5.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.7-.1l1.9.9c.3.1.5.2.5.3.1.2.1.7-.1 1.2z"/></svg>',
   phone:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>'};
 function prodImg(p,cls){const f=(p.fotos||[])[0];const ic=CAT_IC[p.categoria]||CAT_IC["Acessórios"];
-  return f?`<img src="/_blob/${esc(f)}" alt="${esc(p.nome)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',innerHTML:'<svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.2&quot;>${ic.replace(/"/g,"&quot;")}</svg>'}))">`:`<div class="ph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">${ic}</svg></div>`}
+  return f?`<img src="${blobSrc(f)}" alt="${esc(p.nome)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',innerHTML:'<svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.2&quot;>${ic.replace(/"/g,"&quot;")}</svg>'}))">`:`<div class="ph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">${ic}</svg></div>`}
 function prodCard(p,o){o=o||{};const sel=!!o.sel;
   const price=p.preco?`<span class="pprice">${brl(p.preco)}</span>`:`<span class="pprice q">Valor na proposta</span>`;
   const act=o.mode==="view"?`<button class="addbtn" data-detail="${esc(p.id)}">Detalhes</button>`:o.mode==="admin"?`<button class="addbtn" data-edit="${esc(p.id)}">Editar</button>`:o.mode==="pick"?`<button class="addbtn" data-pick="${esc(p.id)}">${IC.plus}Adicionar</button>`:`<button class="addbtn" data-p="${esc(p.id)}" aria-pressed="${sel}">${sel?IC.check+"Adicionado":IC.plus+"Adicionar"}</button>`;
@@ -1322,6 +1327,7 @@ function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({leads,consultor
 function setSync(ok,t){$("#sync").classList.toggle("ok",ok);$("#sync span").textContent=t}
 function arrOf(c){return c==="leads"?leads:c==="consultores"?consultores:c==="supervisores"?supervisores:c==="cursos"?cursos:c==="progresso"?progresso:c==="transferencias"?transf:c==="usuarios"?usuarios:c==="objetivos"?objetivos:c==="lojas"?lojas:produtos}
 function writeErr(e){
+  if(e&&e.code==="permission-denied"){toast("Sem permissão para salvar. Saia e entre de novo.","err");return}
   if(e&&e.code==="invalid_argument"){canWrite=false;$("#readonly").classList.add("on");toast("Sem permissão para editar")}
   else if(e&&e.code==="quota_exceeded")toast("Limite do banco atingido (25 mil registros). Fale com o Marketing.");
   else toast("Não foi possível salvar. Tente de novo.");
@@ -1349,7 +1355,102 @@ async function del(c,id){
   if(mode==="db"){try{await db.collection(c).doc(id).delete();return true}catch(e){toast("Não foi possível excluir");return false}}
   const a=arrOf(c),i=a.findIndex(x=>x.id===id);if(i>=0)a.splice(i,1);saveLocal();onData();return true;
 }
+
+/* ================= Firebase (versão publicada fora do Claude) ================= */
+const FBX=!!(window.FB_CFG&&window.firebase),FB_DOMAIN="conecta-leads.app",FB_BOOT="ligia.santos";
+let fbUser=null,fbReady=false,fbUnsubs=[],fbLastPass="",fbTried="",midiaMap={};
+const fbEmail=(k,v)=>`${k}+${v}@${FB_DOMAIN}`;
+const fbLogin=()=>fbUser&&fbUser.email?fbUser.email.split("@")[0].split("+")[0]:"";
+function blobSrc(id){id=String(id||"");if(!FBX)return"/_blob/"+esc(id);const m=window.MEDIA_MAP||{};if(m[id])return"media/"+esc(m[id]);return esc(midiaMap[id]||"")}
+function fbAux(){return firebase.apps.find(a=>a.name==="aux")||firebase.initializeApp(window.FB_CFG,"aux")}
+function fbClear(){leads=[];consultores=[];produtos=[];supervisores=[];cursos=[];progresso=[];transf=[];usuarios=[];objetivos=[];lojas=[];metas={};midiaMap={}}
+function fbStart(){
+  firebase.initializeApp(window.FB_CFG);
+  db=firebase.firestore();
+  try{db.settings({ignoreUndefinedProperties:true,merge:true})}catch(e){}
+  downloads=null;
+  assetsApi={upload:fbUpload};
+  firebase.auth().onAuthStateChanged(u=>{
+    fbUnsubs.forEach(f=>{try{f()}catch(e){}});fbUnsubs=[];fbUser=u;fbReady=true;mode="db";
+    if(!u){fbClear();usersLoaded=true;fbTried="";if(session){session=null;saveSession()}setSync(false,"Desconectado");render();return}
+    if(session&&session.uid!==fbLogin()){session=null;saveSession()}
+    fbClear();usersLoaded=false;setSync(true,"Sincronizado em tempo real");
+    const sub=(name,set)=>fbUnsubs.push(db.collection(name).onSnapshot(s=>{set(s.docs.map(d=>Object.assign({},d.data(),{id:d.id})));onData()},e=>{console.warn(name,e);
+      if(e&&e.code==="permission-denied"){if(name==="usuarios"){usersLoaded=true;onData()}setSync(false,"Sem permissão")}else setSync(false,"Conexão perdida — recarregue")}));
+    sub("leads",v=>{leads=v});sub("consultores",v=>{consultores=v});sub("produtos",v=>{produtos=v});sub("supervisores",v=>{supervisores=v});
+    sub("cursos",v=>{cursos=v});sub("progresso",v=>{progresso=v});sub("transferencias",v=>{transf=v});sub("usuarios",v=>{usuarios=v;usersLoaded=true});
+    sub("objetivos",v=>{objetivos=v});sub("lojas",v=>{lojas=v});sub("config",v=>{const m=v.find(d=>d.id==="metas");metas=m&&m.porGrupo?m.porGrupo:{}});
+    sub("midia",v=>{const o={};v.forEach(d=>{if(d.data)o[d.id]=d.data});midiaMap=o});
+    render();
+  });
+}
+/* fotos enviadas pela versão publicada: comprimidas e guardadas no próprio banco */
+async function fbUpload(file){
+  if(!/^image\//.test(file.type||"")){const e=new Error("Nesta versão só dá para enviar imagens (JPG, PNG ou WEBP).");toast(e.message,"err");throw e}
+  const url=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)});
+  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});
+  let w=img.naturalWidth,h=img.naturalHeight;const max=1400;if(Math.max(w,h)>max){const k=max/Math.max(w,h);w=Math.round(w*k);h=Math.round(h*k)}
+  const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);
+  let q=.82,data=cv.toDataURL("image/jpeg",q);while(data.length>700000&&q>.4){q-=.12;data=cv.toDataURL("image/jpeg",q)}
+  if(data.length>900000){const e=new Error("Imagem grande demais. Tente uma foto menor.");toast(e.message,"err");throw e}
+  const id=genSalt()+genSalt().slice(0,0);await db.collection("midia").doc(id).set({data,tipo:"image/jpeg",criadoEm:nowISO()});midiaMap[id]=data;return{id}
+}
+/* cria (ou recria, ao redefinir senha) a conta de login de um usuário */
+async function fbProvision(id,senha){
+  let v0=0;try{const s=await db.collection("authv").doc(id).get();if(s.exists)v0=Number(s.data().v)||0}catch(e){}
+  const aux=fbAux();let v=v0+1,ok=false;
+  for(let t=0;t<6&&!ok;t++,v++){try{await aux.auth().createUserWithEmailAndPassword(fbEmail(id,v),senha);ok=true;v--}catch(e){if(e.code!=="auth/email-already-in-use"){try{await aux.auth().signOut()}catch(_){}throw e}}}
+  try{await aux.auth().signOut()}catch(e){}
+  if(!ok)throw new Error("Não foi possível criar o acesso");
+  await db.collection("authv").doc(id).set({v});return v
+}
+async function fbSignIn(k,p,fail){
+  const btn=$("#lgGo");if(btn)btn.disabled=true;const done=()=>{if(btn)btn.disabled=false};
+  let v=null;try{const s=await db.collection("authv").doc(k).get();if(s.exists)v=Number(s.data().v)||1}catch(e){}
+  try{
+    if(v==null){
+      if(k!==FB_BOOT){done();fail();return}
+      try{await firebase.auth().signInWithEmailAndPassword(fbEmail(k,1),p)}
+      catch(e){if(e.code==="auth/too-many-requests"){done();toast("Muitas tentativas. Aguarde alguns minutos.","err");return}
+        try{await firebase.auth().createUserWithEmailAndPassword(fbEmail(k,1),p)}catch(e2){done();fail();return}}
+    }else await firebase.auth().signInWithEmailAndPassword(fbEmail(k,v),p);
+    fbLastPass=p;lgFails=0;try{localStorage.setItem("conecta-lg-fails","0")}catch(e){}
+  }catch(e){done();if(e.code==="auth/too-many-requests")toast("Muitas tentativas. Aguarde alguns minutos.","err");else if(e.code==="auth/network-request-failed")toast("Sem conexão com a internet.","err");else fail();return}
+  done();
+}
+async function fbSetPass(novo,atual){
+  const u=firebase.auth().currentUser;if(!u)throw new Error("Sessão expirada");
+  try{if(atual!=null)await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email,atual))}catch(e){const er=new Error("Senha atual incorreta");er.code="wrong";throw er}
+  try{await u.updatePassword(novo)}catch(e){if(e.code==="auth/requires-recent-login"&&fbLastPass){await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email,fbLastPass));await u.updatePassword(novo)}else throw e}
+  fbLastPass=novo;
+}
+/* configuração inicial: importa o pacote gerado a partir do sistema antigo */
+function renderBootImport(box){
+  box.innerHTML=`<p style="margin:0 0 14px;color:var(--ink-2)">Olá! O banco de dados está vazio. Para começar, importe o <b>pacote de migração</b> (arquivo .json) que o Claude te enviou. Ele traz os leads, lojas, consultores e cria os logins da equipe.</p>
+  <label class="btn primary" style="width:100%;height:44px;cursor:pointer">Escolher pacote de migração<input type="file" id="bootF" accept=".json,application/json" hidden></label>
+  <div id="bootLog" class="muted" style="margin-top:14px;white-space:pre-wrap"></div>
+  <button class="btn" id="bootOut" style="width:100%;margin-top:10px">Sair</button>`;
+  $("#bootOut").onclick=()=>firebase.auth().signOut();
+  $("#bootF").onchange=async ev=>{const f=ev.target.files[0];if(!f)return;let pkg;try{pkg=JSON.parse(await f.text())}catch(e){toast("Arquivo inválido","err");return}
+    const log=t=>{$("#bootLog").textContent=t};
+    try{await fbImport(pkg,log);log("Pronto! Tudo importado. Entrando…");setTimeout(()=>{fbTried="";render()},800)}catch(e){console.error(e);log("Erro: "+(e.message||e)+"\nNada foi perdido. Tente de novo; o que já foi importado é mantido.")}}
+}
+async function fbImport(pkg,log){
+  const cols=pkg.collections||{},contas=pkg.contas||[],me=fbLogin();
+  const authv={};let n=0;
+  for(const c of contas){n++;log(`Criando logins da equipe… ${n} de ${contas.length}`);
+    try{const aux=fbAux();try{await aux.auth().createUserWithEmailAndPassword(fbEmail(c.id,1),c.senha)}catch(e){if(e.code!=="auth/email-already-in-use")throw e}try{await aux.auth().signOut()}catch(e){}authv[c.id]=1}
+    catch(e){throw new Error(`login ${c.id}: ${e.code||e.message}`)}}
+  authv[me]=1;
+  (cols.usuarios||[]).forEach(u=>{u.authV=authv[u.id]||0});
+  const writes=[];Object.entries(cols).forEach(([c,arr])=>arr.forEach(d=>writes.push([c,d])));
+  Object.entries(authv).forEach(([id,v])=>writes.push(["authv",{id,v}]));
+  /* o usuário do administrador vai primeiro, para as regras de segurança já reconhecerem quem está importando */
+  writes.sort((a,b)=>(b[0]==="usuarios"&&b[1].id===me)-(a[0]==="usuarios"&&a[1].id===me));
+  for(let i=0;i<writes.length;i+=400){const b=db.batch();writes.slice(i,i+400).forEach(([c,d])=>{const o=Object.assign({},d);delete o.id;b.set(db.collection(c).doc(d.id),o)});await b.commit();log(`Gravando dados… ${Math.min(i+400,writes.length)} de ${writes.length}`)}
+}
 async function init(){
+  if(FBX){fbStart();render();return}
   render();
   const c=window.claude;
   if(!c||typeof c.use!=="function"){startLocal();return}
@@ -1429,8 +1530,16 @@ const activeAdmins=()=>usuarios.filter(u=>u.perfil==="adm"&&u.ativo!==false);
 let lgFails=Number(localStorage.getItem("conecta-lg-fails")||0),lgLock=Number(localStorage.getItem("conecta-lg-lock")||0),pendingUser=null;
 function renderLogin(){
   const box=$("#loginBody");
+  if(FBX&&!fbReady){box.innerHTML=`<p class="muted">Carregando…</p>`;return}
+  if(FBX&&fbUser&&!pendingUser){
+    if(!usersLoaded){box.innerHTML=`<p class="muted">Carregando…</p>`;return}
+    const k=fbLogin();
+    if(!usuarios.length&&k===FB_BOOT){renderBootImport(box);return}
+    const u=userById(k);
+    if(!u||u.ativo===false||fbTried===k){fbTried="";toast(!u||u.ativo===false?"Este acesso não está ativo. Fale com o administrador.":"Não foi possível abrir o sistema com este login.","err");firebase.auth().signOut();return}
+    fbTried=k;afterAuth(u);return}
   if(!usersLoaded){box.innerHTML=`<p class="muted">Carregando…</p>`;return}
-  if(!usuarios.length){ // primeiro acesso do sistema: cria o administrador
+  if(!usuarios.length&&!FBX){ // primeiro acesso do sistema: cria o administrador
     box.innerHTML=`<p style="margin:0 0 16px;color:var(--ink-2)">Primeiro acesso: crie o login do administrador. Depois, ele cadastra os supervisores e consultores.</p>
     <div class="field"><label for="suNome">Seu nome completo</label><input id="suNome" autocomplete="name"></div>
     <div class="field" style="margin-top:12px"><label for="suLogin">Login</label><input id="suLogin" placeholder="@nome.sobrenome" autocomplete="username"></div>
@@ -1449,9 +1558,9 @@ function renderLogin(){
       <div class="field"><label for="npA">Nova senha (mínimo 8 caracteres)</label><input id="npA" type="password" autocomplete="new-password"></div>
       <div class="field" style="margin-top:12px"><label for="npB">Confirmar nova senha</label><input id="npB" type="password" autocomplete="new-password"></div>
       <button class="btn primary" id="npGo" style="width:100%;margin-top:18px;height:44px">Salvar senha e entrar</button><button class="btn" id="npBack" style="width:100%;margin-top:8px">Voltar</button>`;
-      $("#npBack").onclick=()=>{pendingUser=null;renderLogin()};
+      $("#npBack").onclick=()=>{pendingUser=null;if(FBX){firebase.auth().signOut();return}renderLogin()};
       $("#npGo").onclick=async()=>{const a=$("#npA").value,b=$("#npB").value;if(a.length<8){toast("A senha precisa ter pelo menos 8 caracteres","err");return}if(a!==b){toast("As senhas não conferem","err");return}
-        const nu=clone(u);nu.salt=genSalt();nu.hash=await hashPass(a,nu.salt);nu.trocarSenha=false;nu.senhaTrocadaEm=nowISO();if(await put("usuarios",nu,true)){if(mode==="local"){Object.assign(u,nu);saveLocal()}pendingUser=nu;toast("Senha criada","ok");afterAuth(nu)}};
+        if(FBX){try{await fbSetPass(a)}catch(e){toast("Não foi possível salvar a senha. Saia e entre de novo.","err");return}}const nu=clone(u);nu.salt=genSalt();nu.hash=await hashPass(a,nu.salt);nu.trocarSenha=false;nu.senhaTrocadaEm=nowISO();if(await put("usuarios",nu,true)){if(mode==="local"){Object.assign(u,nu);saveLocal()}pendingUser=nu;toast("Senha criada","ok");afterAuth(nu)}};
       setTimeout(()=>$("#npA").focus(),50);return}
     const refs=(u.refs||[]).map(consById).filter(c=>c&&!c.inativo);
     box.innerHTML=`<p style="margin:0 0 14px;color:var(--ink-2)">Você atende mais de uma loja. Qual quer abrir agora?</p><div class="roles">${refs.map(c=>`<button class="role" data-ref="${esc(c.id)}"><span class="ic">●</span><span><b>${esc(c.loja)}</b><span>${esc(c.grupo||"")}</span></span></button>`).join("")}</div>`;
@@ -1461,8 +1570,9 @@ function renderLogin(){
     <button class="btn primary" id="lgGo" style="width:100%;margin-top:18px;height:44px">Entrar</button>
     <p class="muted" style="margin:14px 0 0">Esqueceu a senha? Peça ao administrador para redefinir.</p>`;
   const go=async()=>{if(Date.now()<lgLock){toast(`Muitas tentativas. Aguarde ${Math.ceil((lgLock-Date.now())/1000)} segundos.`,"err");return}
-    const k=loginKey($("#lgUser").value),p=$("#lgPass").value,u=userById(k);
+    const k=loginKey($("#lgUser").value),p=$("#lgPass").value,u=FBX?null:userById(k);
     const fail=()=>{lgFails++;if(lgFails>=5){lgLock=Date.now()+60000;lgFails=0}try{localStorage.setItem("conecta-lg-fails",lgFails);localStorage.setItem("conecta-lg-lock",lgLock)}catch(e){}toast("Login ou senha incorretos","err");$("#lgPass").value="";$("#lgPass").focus()};
+    if(FBX){if(!k||!p){fail();return}return fbSignIn(k,p,fail)}
     if(!u||!p){fail();return}$("#lgGo").disabled=true;const h=await hashPass(p,u.salt);$("#lgGo").disabled=false;
     if(h!==u.hash){fail();return}
     if(u.ativo===false){toast("Este acesso foi cancelado. Fale com o administrador.","err");return}
@@ -1471,25 +1581,26 @@ function renderLogin(){
   setTimeout(()=>$("#lgUser").focus(),50);
 }
 function afterAuth(u){if(u.trocarSenha){pendingUser=u;renderLogin();return}
-  if(u.perfil==="con"){const refs=(u.refs||[]).filter(id=>{const c=consById(id);return c&&!c.inativo});if(!refs.length){toast("Seu cadastro de consultor não está ativo. Fale com o administrador.","err");pendingUser=null;renderLogin();return}
+  if(u.perfil==="con"){const refs=(u.refs||[]).filter(id=>{const c=consById(id);return c&&!c.inativo});if(!refs.length){toast("Seu cadastro de consultor não está ativo. Fale com o administrador.","err");pendingUser=null;if(FBX){firebase.auth().signOut();return}renderLogin();return}
     if(refs.length>1){pendingUser=u;renderLogin();return}return startSession(u,refs[0])}
   startSession(u)}
-function startSession(u,ref){pendingUser=null;
+function startSession(u,ref){pendingUser=null;fbTried="";
   session={role:u.perfil,id:u.perfil==="con"?ref:u.perfil==="sup"?u.ref:"adm",uid:u.id,login:u.login,nome:u.nome};
   const nu=clone(u);nu.ultimoAcesso=nowISO();put("usuarios",nu,true).then(()=>{if(mode==="local")saveLocal()});
   saveSession();applySession();resetFilters();state.period="mes";state.view=u.perfil==="con"?"dev":u.perfil==="sup"?"equipe":"geral";closeDrawer();render()}
 function validSession(){if(!session||!session.uid)return false;if(!usersLoaded)return true;const u=userById(session.uid);if(!u||u.ativo===false)return false;
   if(session.role==="con"){const c=consById(session.id);return!!c&&!c.inativo&&(u.refs||[]).includes(session.id)}if(session.role==="sup")return supList().includes(session.id);return u.perfil==="adm"}
 function doLogin(){} // substituído pelo login com senha
-function logout(){ac={tab:"cursos",cid:null,sec:null,quiz:null,result:null,edit:null,cat:"Todos"};session=null;pendingUser=null;saveSession();applySession();closeDrawer();render()}
+function logout(){if(FBX){try{firebase.auth().signOut()}catch(e){}}ac={tab:"cursos",cid:null,sec:null,quiz:null,result:null,edit:null,cat:"Todos"};session=null;pendingUser=null;saveSession();applySession();closeDrawer();render()}
 async function changeMyPassword(){
   openModal(`<h3 id="mTitle">Alterar minha senha</h3><p>${esc(session.login||"")}</p>
   <div class="field"><label for="cpOld">Senha atual</label><input id="cpOld" type="password" autocomplete="current-password"></div>
   <div class="field" style="margin-top:12px"><label for="cpA">Nova senha (mínimo 8 caracteres)</label><input id="cpA" type="password" autocomplete="new-password"></div>
   <div class="field" style="margin-top:12px"><label for="cpB">Confirmar nova senha</label><input id="cpB" type="password" autocomplete="new-password"></div>
   <div class="acts"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="cpOk">Salvar</button></div>`);
-  $("#cpOk").onclick=async()=>{const u=userById(session.uid);if(!u)return;if(await hashPass($("#cpOld").value,u.salt)!==u.hash){toast("Senha atual incorreta","err");return}
+  $("#cpOk").onclick=async()=>{const u=userById(session.uid);if(!u)return;if(!FBX&&await hashPass($("#cpOld").value,u.salt)!==u.hash){toast("Senha atual incorreta","err");return}
     const a=$("#cpA").value;if(a.length<8){toast("A senha precisa ter pelo menos 8 caracteres","err");return}if(a!==$("#cpB").value){toast("As senhas não conferem","err");return}
+    if(FBX){try{await fbSetPass(a,$("#cpOld").value)}catch(e){toast(e.code==="wrong"?"Senha atual incorreta":"Não foi possível alterar a senha","err");return}}
     const nu=clone(u);nu.salt=genSalt();nu.hash=await hashPass(a,nu.salt);nu.senhaTrocadaEm=nowISO();if(await put("usuarios",nu,true)){if(mode==="local")saveLocal();closeModal();toast("Senha alterada","ok")}};
 }
 function renderUserChip(){renderThemeSeg();$("#btnMe").textContent=session?initials(session.nome||(session.role==="sup"?session.id:consName(session.id))):"";if(!session){$("#userChip").innerHTML="";return}
@@ -2425,7 +2536,7 @@ function prodForm(p){
   <div class="field full"><label for="pVei">Carros compatíveis (separados por vírgula, vazio = todos os carros)</label><input id="pVei" value="${esc((e.veiculos||[]).join(", "))}" placeholder="Ex.: Creta, HB20, XC60"></div>
   <div class="field full"><label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="pAtivo" ${e.ativo!==false?"checked":""}> Visível no catálogo</label></div></div>
   <div class="acts">${p?`<button class="btn danger" id="pDel" style="margin-right:auto">Excluir</button>`:""}<button class="btn" data-close>Cancelar</button><button class="btn primary" id="pOk">Salvar produto</button></div>`,true);
-  const drawF=()=>{$("#pFotos").innerHTML=e.fotos.map((f,i)=>`<div class="ph-it"><img src="/_blob/${esc(f)}" alt="Foto ${i+1}"><button data-rf="${i}" aria-label="Remover foto ${i+1}">×</button></div>`).join("")+(assetsApi&&e.fotos.length<6?`<label class="add">${IC.plus}<br>Foto<input type="file" accept="image/png,image/jpeg,image/webp" id="pFile" hidden multiple></label>`:"");
+  const drawF=()=>{$("#pFotos").innerHTML=e.fotos.map((f,i)=>`<div class="ph-it"><img src="${blobSrc(f)}" alt="Foto ${i+1}"><button data-rf="${i}" aria-label="Remover foto ${i+1}">×</button></div>`).join("")+(assetsApi&&e.fotos.length<6?`<label class="add">${IC.plus}<br>Foto<input type="file" accept="image/png,image/jpeg,image/webp" id="pFile" hidden multiple></label>`:"");
     $("#pFotoHint").textContent=assetsApi?"Até 6 fotos. A primeira é a capa. Fundo claro e o produto inteiro na imagem valorizam o catálogo.":"Envio de fotos disponível no sistema publicado para quem tem permissão de edição.";
     $("#pFotos").querySelectorAll("[data-rf]").forEach(b=>b.onclick=()=>{e.fotos.splice(+b.dataset.rf,1);drawF()});
     const f=$("#pFile");if(f)f.onchange=async()=>{for(const file of [...f.files].slice(0,6-e.fotos.length)){if(file.size>20e6){toast("Foto acima de 20 MB");continue}try{toast("Enviando foto…");const r=await assetsApi.upload(file);e.fotos.push(r.id);drawF();toast("Foto adicionada")}catch(err){toast("Não foi possível enviar a foto")}}}};
@@ -2442,8 +2553,8 @@ function openProduct(id,o){
   const box=$("#pSheetBox"),fotos=p.fotos||[];
   const draw=()=>{const sel=o.isSel?o.isSel(p.id):false;
     box.innerHTML=`<button class="x" id="psX" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-    <div class="pdetail"><div><div class="gal-main" id="galMain">${fotos.length?`<img src="/_blob/${esc(fotos[gi])}" alt="${esc(p.nome)}, foto ${gi+1} de ${fotos.length}">`:prodImg(p)}</div>
-      ${fotos.length>1?`<div class="gal-thumbs" role="group" aria-label="Fotos">${fotos.map((f,i)=>`<button data-g="${i}" aria-pressed="${i===gi}" aria-label="Foto ${i+1}"><img src="/_blob/${esc(f)}" alt=""></button>`).join("")}</div>`:""}</div>
+    <div class="pdetail"><div><div class="gal-main" id="galMain">${fotos.length?`<img src="${blobSrc(fotos[gi])}" alt="${esc(p.nome)}, foto ${gi+1} de ${fotos.length}">`:prodImg(p)}</div>
+      ${fotos.length>1?`<div class="gal-thumbs" role="group" aria-label="Fotos">${fotos.map((f,i)=>`<button data-g="${i}" aria-pressed="${i===gi}" aria-label="Foto ${i+1}"><img src="${blobSrc(f)}" alt=""></button>`).join("")}</div>`:""}</div>
     <div class="pd-info"><span class="pcat">${esc(p.categoria)}</span><h2>${esc(p.nome)}</h2>
       <div class="pd-price ${p.preco?"":"q"}">${p.preco?brl(p.preco):"Valor informado na proposta do consultor"}</div>
       ${p.descricao?`<p style="margin:0;color:var(--ink-2);font-size:15px">${esc(p.descricao)}</p>`:""}
@@ -2783,7 +2894,7 @@ function itemRow(i,idx,ro){
       ${i.motivo==="Outro"?`<label>Qual? *<input data-f="obs" data-i="${idx}" value="${esc(i.obs||"")}" ${ro} aria-invalid="${inv&&!i.obs}"></label>`:""}
       ${i.motivo&&i.motivo!=="Outro"?`<label class="full">Observação (opcional)<input data-f="obs" data-i="${idx}" value="${esc(i.obs||"")}" ${ro} placeholder="${i.motivo==="Cotação externa"?"Onde cotou? Ex.: loja de película do bairro":""}"></label>`:""}</div>`:"";
   const pr=produtos.find(x=>x.id===i.id);
-  return`<div class="item"><div class="item-head"><span class="thumb">${pr&&(pr.fotos||[])[0]?`<img src="/_blob/${esc(pr.fotos[0])}" alt="">`:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${CAT_IC[i.categoria]||CAT_IC["Acessórios"]}</svg>`}</span><div class="n">${esc(i.nome)}<small>${esc(i.categoria||"")}${i.preco?" · tabela "+brl(i.preco):""}${i.origem==="catalogo"?" · escolhido pelo cliente":""}</small></div>${canWrite&&i.origem!=="catalogo"?`<button class="x" data-rm="${idx}" aria-label="Remover item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`:""}</div>
+  return`<div class="item"><div class="item-head"><span class="thumb">${pr&&(pr.fotos||[])[0]?`<img src="${blobSrc(pr.fotos[0])}" alt="">`:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${CAT_IC[i.categoria]||CAT_IC["Acessórios"]}</svg>`}</span><div class="n">${esc(i.nome)}<small>${esc(i.categoria||"")}${i.preco?" · tabela "+brl(i.preco):""}${i.origem==="catalogo"?" · escolhido pelo cliente":""}</small></div>${canWrite&&i.origem!=="catalogo"?`<button class="x" data-rm="${idx}" aria-label="Remover item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`:""}</div>
   <div class="item-st">${Object.entries(ITEM_ST).map(([k,v])=>`<button type="button" data-st="${k}" data-i="${idx}" aria-pressed="${s===k}" style="${s===k?`background:${v.c}`:""}" ${ro}>${v.n}</button>`).join("")}</div>${extra}</div>`;
 }
 function pickProduct(){
@@ -3218,8 +3329,8 @@ function coursePct(c,p){const tot=(c.aulas||[]).length+1;if(!p)return 0;return M
 function fmtCarga(min){min=Number(min)||0;if(!min)return"";if(min<60)return min+" min";const h=Math.floor(min/60),m=min%60;return h+(h===1?" hora":" horas")+(m?" e "+m+" min":"")}
 const MIDIA_RX=/^\s*\[\[\s*m[ií]dia\s*(\d+)\s*\]\]\s*$/i;
 function midiaHTML(m,n){if(!m||!m.id)return"";const leg=m.legenda?`<figcaption>${esc(m.legenda)}</figcaption>`:"";
-  if(m.tipo==="anim")return`<figure class="l-fig"><video class="l-anim" src="/_blob/${esc(m.id)}" autoplay muted loop playsinline preload="metadata" aria-label="${esc(m.legenda||"Animação "+n)}"></video>${leg}</figure>`;
-  return`<figure class="l-fig"><button type="button" class="l-zoom" data-zoom="${esc(m.id)}" aria-label="Ampliar imagem${m.legenda?": "+esc(m.legenda):""}"><img src="/_blob/${esc(m.id)}" alt="${esc(m.legenda||"Imagem "+n+" da aula")}" loading="lazy"></button>${leg}</figure>`}
+  if(m.tipo==="anim")return`<figure class="l-fig"><video class="l-anim" src="${blobSrc(m.id)}" autoplay muted loop playsinline preload="metadata" aria-label="${esc(m.legenda||"Animação "+n)}"></video>${leg}</figure>`;
+  return`<figure class="l-fig"><button type="button" class="l-zoom" data-zoom="${esc(m.id)}" aria-label="Ampliar imagem${m.legenda?": "+esc(m.legenda):""}"><img src="${blobSrc(m.id)}" alt="${esc(m.legenda||"Imagem "+n+" da aula")}" loading="lazy"></button>${leg}</figure>`}
 function lessonHTML(a){const ms=a.midias||[],used=new Set();let out="",buf=[];
   const flush=()=>{if(buf.join("").trim())out+=md(buf.join("\n"));buf=[]};
   String(a.conteudo||"").split(/\n/).forEach(l=>{const m=l.match(MIDIA_RX);if(m){const n=+m[1];if(ms[n-1]){flush();out+=midiaHTML(ms[n-1],n);used.add(n-1);return}}buf.push(l)});flush();
@@ -3240,7 +3351,7 @@ function md(t){const lines=String(t||"").split(/\n/);let out="",list=false,para=
   flush();if(list)out+="</ul>";return out}
 async function saveProg(p){return put("progresso",p,true).then(ok=>{if(mode==="local"){saveLocal()}return ok})}
 function coverHTML(c,locked){const col=AC_COL[c.categoria]||"#031872";
-  return`<div class="ccover" style="background:${c.capa?"var(--surface-2)":`linear-gradient(135deg,${col},${col}cc)`}">${c.capa?`<img src="/_blob/${esc(c.capa)}" alt="">`:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">${AC_IC[c.categoria]||AC_IC["Processos"]}</svg>`}
+  return`<div class="ccover" style="background:${c.capa?"var(--surface-2)":`linear-gradient(135deg,${col},${col}cc)`}">${c.capa?`<img src="${blobSrc(c.capa)}" alt="">`:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">${AC_IC[c.categoria]||AC_IC["Processos"]}</svg>`}
   ${!c.publicado?`<span class="badge-c">Rascunho</span>`:""}${locked?`<div class="lockb"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>`:""}</div>`}
 
 function renderAcademia(){
@@ -3292,7 +3403,7 @@ function renderCourse(){
   if(!a||!aulaUnlocked(c,i,p)){ac.sec=aulas.length?aulas[0].id:"prova";return renderCourse()}
   const done=aulaDone(p,a),last=i===aulas.length-1;
   main.innerHTML=`<span class="kicker">Aula ${i+1} de ${aulas.length}</span><h2>${esc(a.titulo)}</h2>
-    ${a.tipo==="video"?(a.video?`<video class="vid" id="acVid" controls preload="metadata" src="/_blob/${esc(a.video)}"></video>`:a.videoUrl?`<div class="vid-link"><svg width="34" height="34" viewBox="0 0 24 24" fill="var(--accent)" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><div style="flex:1"><b>Vídeo da aula</b><div class="muted">Abre em uma nova aba. Depois de assistir, volte aqui para concluir.</div></div><a class="btn primary" id="acVidLink" href="${esc(a.videoUrl)}" target="_blank" rel="noopener">Assistir</a></div>`:`<p class="muted">Vídeo ainda não enviado.</p>`):""}
+    ${a.tipo==="video"?(a.video?`<video class="vid" id="acVid" controls preload="metadata" src="${blobSrc(a.video)}"></video>`:a.videoUrl?`<div class="vid-link"><svg width="34" height="34" viewBox="0 0 24 24" fill="var(--accent)" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><div style="flex:1"><b>Vídeo da aula</b><div class="muted">Abre em uma nova aba. Depois de assistir, volte aqui para concluir.</div></div><a class="btn primary" id="acVidLink" href="${esc(a.videoUrl)}" target="_blank" rel="noopener">Assistir</a></div>`:`<p class="muted">Vídeo ainda não enviado.</p>`):""}
     ${lessonHTML(a)}
     <div class="c-actions"><span class="muted" id="acHint">${done?"Aula concluída.":a.tipo==="video"&&a.video?"Assista ao vídeo até o fim para concluir.":""}</span>
     ${i>0?`<button class="btn" id="acPrev">Aula anterior</button>`:""}<button class="btn primary" id="acDone" ${!done&&a.tipo==="video"&&(a.video||a.videoUrl)?"disabled":""}>${done?(last?"Ir para a prova":"Próxima aula"):(last?"Concluir e ir para a prova":"Concluir e avançar")}</button></div>`;
@@ -3435,7 +3546,7 @@ function renderCourseEditor(){
     <p class="muted" style="margin:-6px 0 10px">Nota mínima para o certificado: ${NOTA_MIN}%.${e.prova.length&&e.prova.length<20?` Com ${e.prova.length} questões, é preciso acertar todas.`:""}</p>
     <div class="ed-list">${e.prova.map((q,i)=>`<div class="ed-it"><span class="pos muted" style="width:20px">${i+1}</span><div class="t">${esc(q.pergunta)}<small>Correta: ${esc(q.opcoes[q.correta]||"")}</small></div><button class="btn sm" data-eq="${i}">Editar</button><button class="x" data-dq="${i}" aria-label="Excluir questão">×</button></div>`).join("")||`<div class="ed-it muted">Nenhuma questão ainda.</div>`}</div></div></div>`;
   const keep=()=>{e.titulo=$("#cTit").value.trim();e.descricao=$("#cDesc").value.trim();e.categoria=$("#cCat").value.trim();e.cargaHoraria=parseInt($("#cCh").value)||"";e.prereq=$("#cPre").value;e.publicado=$("#cPub").checked};
-  const drawCapa=()=>{$("#cCapa").innerHTML=(e.capa?`<div class="ph-it"><img src="/_blob/${esc(e.capa)}" alt="Capa"><button id="rmCapa" aria-label="Remover capa">×</button></div>`:"")+(assetsApi&&!e.capa?`<label class="add">${IC.plus}<br>Capa<input type="file" accept="image/*" id="capaF" hidden></label>`:"")+(!assetsApi?`<span class="muted">Envio de imagem disponível no sistema publicado.</span>`:"");
+  const drawCapa=()=>{$("#cCapa").innerHTML=(e.capa?`<div class="ph-it"><img src="${blobSrc(e.capa)}" alt="Capa"><button id="rmCapa" aria-label="Remover capa">×</button></div>`:"")+(assetsApi&&!e.capa?`<label class="add">${IC.plus}<br>Capa<input type="file" accept="image/*" id="capaF" hidden></label>`:"")+(!assetsApi?`<span class="muted">Envio de imagem disponível no sistema publicado.</span>`:"");
     if($("#rmCapa"))$("#rmCapa").onclick=()=>{e.capa="";drawCapa()};
     if($("#capaF"))$("#capaF").onchange=async ev=>{const f=ev.target.files[0];if(!f)return;try{toast("Enviando imagem…","ok");const r=await assetsApi.upload(f);e.capa=r.id;drawCapa()}catch(err){toast("Não foi possível enviar a imagem","err")}}};
   drawCapa();
@@ -3466,7 +3577,7 @@ function lessonForm(a,idx){
   a.midias=a.midias||[];
   const keepLeg=()=>document.querySelectorAll("#lMid [data-leg]").forEach(x=>{const m=a.midias[+x.dataset.leg];if(m)m.legenda=x.value.trim()});
   const drawM=()=>{const box=$("#lMid");if(!box)return;
-    box.innerHTML=`<div class="mid-list">${a.midias.map((m,i)=>`<div class="mid-it"><div class="mid-th">${m.tipo==="anim"?`<video src="/_blob/${esc(m.id)}" muted loop autoplay playsinline></video>`:`<img src="/_blob/${esc(m.id)}" alt="">`}<span>${i+1}</span></div>
+    box.innerHTML=`<div class="mid-list">${a.midias.map((m,i)=>`<div class="mid-it"><div class="mid-th">${m.tipo==="anim"?`<video src="${blobSrc(m.id)}" muted loop autoplay playsinline></video>`:`<img src="${blobSrc(m.id)}" alt="">`}<span>${i+1}</span></div>
       <div class="mid-b"><input data-leg="${i}" value="${esc(m.legenda||"")}" placeholder="Legenda (opcional)" aria-label="Legenda da mídia ${i+1}"><div class="mid-acts"><span class="tag gray">${m.tipo==="anim"?"Animação":/gif/i.test(m.ct||"")?"GIF":"Imagem"}</span><button class="btn sm ghost" data-ins="${i}">Inserir no texto</button><button class="x" data-mu="${i}" aria-label="Subir" ${i?"":"disabled"}>↑</button><button class="x" data-md="${i}" aria-label="Descer" ${i<a.midias.length-1?"":"disabled"}>↓</button><button class="btn sm danger" data-mx="${i}">Remover</button></div></div></div>`).join("")}</div>
       ${assetsApi?`<label class="btn sm" style="margin-top:8px">${IC.plus}Adicionar imagem ou animação<input type="file" id="mF" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm" multiple hidden></label> <span class="muted" id="mSt"></span>`:`<p class="muted" style="margin:6px 0 0">Envio de imagens e animações disponível no sistema publicado.</p>`}`;
     const ren=(i,j)=>{keepLeg();const t=$("#lTxt");t.value=t.value.replace(/\[\[\s*m[ií]dia\s*(\d+)\s*\]\]/gi,(x,n)=>{n=+n;return`[[mídia ${n===i+1?j+1:n===j+1?i+1:n}]]`});[a.midias[i],a.midias[j]]=[a.midias[j],a.midias[i]];drawM()};
@@ -3604,6 +3715,7 @@ function showPasswords(rows,title){
 }
 async function createUser(o,taken){const senha=genPass(8),salt=genSalt(),id=o.login||suggestLogin(o.nome,taken);if(taken)taken.add(id);
   const u={id,login:"@"+id,nome:o.nome,perfil:o.perfil,ref:o.ref||"",refs:o.refs||[],salt,hash:await hashPass(senha,salt),ativo:true,trocarSenha:true,criadoEm:nowISO(),criadoPor:whoName()};
+  if(FBX){try{u.authV=await fbProvision(id,senha)}catch(e){toast("Não foi possível criar o login de "+o.nome,"err");return null}}
   const ok=await put("usuarios",u,true);return ok?{nome:u.nome,login:u.login,senha,perfil:{adm:"Administrador",sup:"Supervisor",con:"Consultor"}[u.perfil],vinculo:userVinculo(u)}:null}
 async function bulkUsers(){
   const taken=new Set(),jobs=[],byPerson={};
@@ -3656,6 +3768,7 @@ function newUserForm(){
 }
 async function resetPass(u){if(!await confirm(`Gerar uma nova senha temporária para ${u.login}? A senha atual deixa de funcionar.`))return;
   const senha=genPass(8),nu=clone(u);nu.salt=genSalt();nu.hash=await hashPass(senha,nu.salt);nu.trocarSenha=true;nu.senhaRedefinidaEm=nowISO();nu.senhaRedefinidaPor=whoName();
+  if(FBX){try{nu.authV=await fbProvision(u.id,senha)}catch(e){toast("Não foi possível redefinir a senha","err");return}}
   if(await put("usuarios",nu,true)){if(mode==="local"){Object.assign(u,nu);saveLocal()}render();showPasswords([{nome:u.nome,login:u.login,senha,perfil:u.perfil,vinculo:userVinculo(u)}],"Senha redefinida")}}
 async function reactivateUser(u){if(!await confirm(`Reativar o acesso de ${u.nome}? Os leads que foram para a base do supervisor continuam lá até serem transferidos.`))return;
   const nu=clone(u);nu.ativo=true;nu.reativadoEm=nowISO();
