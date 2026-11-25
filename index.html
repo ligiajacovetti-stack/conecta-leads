@@ -1412,10 +1412,12 @@ async function fbSignIn(k,p,fail){
       if(k!==FB_BOOT){done();fail();return}
       try{await firebase.auth().signInWithEmailAndPassword(fbEmail(k,1),p)}
       catch(e){if(e.code==="auth/too-many-requests"){done();toast("Muitas tentativas. Aguarde alguns minutos.","err");return}
-        try{await firebase.auth().createUserWithEmailAndPassword(fbEmail(k,1),p)}catch(e2){done();fail();return}}
+        try{await firebase.auth().createUserWithEmailAndPassword(fbEmail(k,1),p)}catch(e2){done();
+          if(e2.code==="auth/email-already-in-use"){fail();return}
+          toast(e2.code==="auth/operation-not-allowed"?"O login por e-mail/senha ainda não está ativado no Firebase (Authentication → Método de login).":e2.code==="auth/weak-password"?"A senha precisa ter pelo menos 6 caracteres.":"Erro do Firebase: "+(e2.code||e2.message),"err");return}}
     }else await firebase.auth().signInWithEmailAndPassword(fbEmail(k,v),p);
     fbLastPass=p;lgFails=0;try{localStorage.setItem("conecta-lg-fails","0")}catch(e){}
-  }catch(e){done();if(e.code==="auth/too-many-requests")toast("Muitas tentativas. Aguarde alguns minutos.","err");else if(e.code==="auth/network-request-failed")toast("Sem conexão com a internet.","err");else fail();return}
+  }catch(e){done();if(e.code==="auth/too-many-requests")toast("Muitas tentativas. Aguarde alguns minutos.","err");else if(e.code==="auth/network-request-failed")toast("Sem conexão com a internet.","err");else if(e.code==="auth/operation-not-allowed")toast("O login por e-mail/senha ainda não está ativado no Firebase (Authentication → Método de login).","err");else if(/invalid-credential|wrong-password|user-not-found|invalid-login/.test(e.code||""))fail();else toast("Erro do Firebase: "+(e.code||e.message),"err");return}
   done();
 }
 async function fbSetPass(novo,atual){
@@ -1530,6 +1532,7 @@ const activeAdmins=()=>usuarios.filter(u=>u.perfil==="adm"&&u.ativo!==false);
 let lgFails=Number(localStorage.getItem("conecta-lg-fails")||0),lgLock=Number(localStorage.getItem("conecta-lg-lock")||0),pendingUser=null;
 function renderLogin(){
   const box=$("#loginBody");
+  if(FBX&&!$("#fbVer")){const v=document.createElement("p");v.id="fbVer";v.className="muted";v.style.cssText="text-align:center;margin:10px 0 0;font-size:11px;opacity:.6";v.textContent="versão Firebase 2";box.parentElement.appendChild(v)}
   if(FBX&&!fbReady){box.innerHTML=`<p class="muted">Carregando…</p>`;return}
   if(FBX&&fbUser&&!pendingUser){
     if(!usersLoaded){box.innerHTML=`<p class="muted">Carregando…</p>`;return}
