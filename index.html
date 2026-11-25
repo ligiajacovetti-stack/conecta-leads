@@ -1453,6 +1453,7 @@ async function fbImport(pkg,log){
 }
 async function init(){
   if(FBX){fbStart();render();return}
+  if(window.FB_CFG&&!window.firebase){mode="loading";render();const lg=$("#login");if(lg)lg.hidden=false;const b=$("#loginBody");if(b)b.innerHTML=`<p style="color:var(--hot);margin:0 0 10px"><b>Não foi possível carregar o Firebase.</b></p><p class="muted" style="margin:0">Verifique a internet e se algum bloqueador de anúncios ou a rede da empresa está bloqueando o endereço <b>gstatic.com</b>. Depois aperte Ctrl+F5.</p>`;return}
   render();
   const c=window.claude;
   if(!c||typeof c.use!=="function"){startLocal();return}
